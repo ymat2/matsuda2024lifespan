@@ -10,6 +10,10 @@ mapped_genes = mappedkeys(org.Hs.egSYMBOL2EG)
 sym2geneid = as.data.frame(org.Hs.egSYMBOL2EG[mapped_genes])
 
 kegg = clusterProfiler::download_KEGG("hsa")
+lrp = kegg$KEGGPATHID2EXTID |>
+  dplyr::filter(from == "hsa04211") |>
+  dplyr::rename(gene_id = to) |>
+  dplyr::left_join(sym2geneid, by = "gene_id")
 lrp_mlt = kegg$KEGGPATHID2EXTID |>
   dplyr::filter(from == "hsa04213") |>  # multiple species
   dplyr::rename(gene_id = to) |>
@@ -100,7 +104,7 @@ wilcox = wilcox.test(birds_rho$Rho, bats_rho$Rho, alternative = "less", paired =
 box_all = ggplot(df4boxplot_all) +
   aes(x = group, y = Rho, color = group) +
   geom_hline(aes(yintercept = 0), color = "#444444", linetype = "solid", linewidth = 1.5) +
-  geom_jitter(height = 0, width = .2, size = 3, alpha = 1) +
+  geom_jitter(height = 0, width = .2, size = 2, alpha = 1) +
   geom_boxplot(outliers = FALSE, linewidth = 1, shape = 16) +
   geom_segment(x = 1, xend = 2, y = .6, yend = .6, color = "#444444") +
   annotate("text", x = 1.5, y = .65, label = "N.S.", size = 5, color = "#444444") +
@@ -173,7 +177,8 @@ df4boxplot_genage = dplyr::full_join(
   dplyr::rename("Birds" = Rho_b, "Bats" = Rho_a) |>
   dplyr::mutate(symbol = forcats::fct_inorder(symbol)) |>
   tidyr::pivot_longer(2:3, names_to = "group", values_to = "Rho") |>
-  dplyr::left_join(lrp_sig, by = c("symbol", "group"))
+  dplyr::left_join(lrp_sig, by = c("symbol", "group")) |>
+  dplyr::mutate(lrp = dplyr::if_else(symbol %in% lrp$symbol, "Y", "N"))
 
 birds_rho = df4boxplot_genage |> dplyr::filter(group == "Birds")
 bats_rho = df4boxplot_genage |> dplyr::filter(group == "Bats")
@@ -183,11 +188,12 @@ box_genage = ggplot(df4boxplot_genage) +
   aes(x = group, y = Rho, color = group) +
   geom_hline(aes(yintercept = 0), color = "#444444", linetype = "solid", linewidth = 1.5) +
   geom_boxplot(outliers = FALSE, linewidth = 1, shape = 16) +
-  geom_jitter(aes(shape = sig), height = 0, width = .2, size = 3, alpha = .7) +
+  geom_jitter(aes(shape = sig, size = lrp), height = 0, width = .2, alpha = .7) +
   geom_segment(x = 1, xend = 2, y = .45, yend = .45, color = "#444444") +
   annotate("text", x = 1.5, y = .5, label = "N.S.", size = 5, color = "#444444") +
   scale_color_manual(values = c("#E69F00", "#009E73")) +
   scale_shape_manual(values = c("Y" = 16, "N" = 1)) +
+  scale_size_manual(values = c("Y" = 4, "N" = 1)) +
   scale_y_continuous(limits = c(NA, 0.55)) +
   theme_bw(base_size = 20) +
   labs(x = "", y = "", title = "GenAge") +
