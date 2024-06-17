@@ -18,7 +18,7 @@ RERs = readr::read_rds("data/RER_all.nogap.rds")
 
 # Binary trait analysis --------------------------------------------------------
 
-lht = readr::read_tsv("data/species.tsv") |>
+lht = readr::read_tsv("out/species.tsv") |>
   dplyr::mutate(rownm = stringr::str_replace(`Organism Name`, " ", "_")) |>
   tibble::column_to_rownames(var = "rownm")
 
@@ -67,10 +67,14 @@ res_bats = RERconverge::correlateWithBinaryPhenotype(
   dplyr::mutate(symbol = str_replace(symbol, ".pep.aln.*", "")) |>
   dplyr::arrange(P) |>
   tidyr::drop_na()
-readr::write_tsv(res_birds, file = "out/binary.bats.tsv")
+readr::write_tsv(res_bats, file = "out/binary.bats.tsv")
 
-
-## Fig.2a: Boxplot
+lrp_sig = dplyr::bind_rows(
+  res_birds |> dplyr::mutate(group = "Birds"),
+  res_bats |> dplyr::mutate(group = "Bats")
+  ) |>
+  dplyr::mutate(sig = dplyr:::if_else(p.adj < 0.05, "Y", "N")) |>
+  dplyr::select(symbol, group, sig)
 
 df4boxplot = dplyr::full_join(
   res_birds |>
@@ -85,26 +89,46 @@ df4boxplot = dplyr::full_join(
   dplyr::select(symbol, Rho_b, Rho_a) |>
   dplyr::rename("Birds" = Rho_b, "Bats" = Rho_a) |>
   dplyr::mutate(symbol = forcats::fct_inorder(symbol)) |>
-  pivot_longer(2:3, names_to = "group", values_to = "Rho")
+  tidyr::pivot_longer(2:3, names_to = "group", values_to = "Rho") |>
+  dplyr::left_join(lrp_sig, by = c("symbol", "group"))
+
+birds_rho = df4boxplot |> dplyr::filter(group == "Birds")
+bats_rho = df4boxplot |> dplyr::filter(group == "Bats")
+wilcox = wilcox.test(birds_rho$Rho, bats_rho$Rho, paired = TRUE)
+
+birds_rho_sig = df4boxplot |> dplyr::filter(group == "Birds" & sig == "Y")
+bats_rho_sig = df4boxplot |> dplyr::filter(group == "Bats" & sig == "Y")
+wilcox_sig = wilcox.test(birds_rho_sig$Rho, bats_rho_sig$Rho)
 
 box = ggplot(df4boxplot) +
   aes(x = group, y = Rho, color = group) +
   geom_hline(aes(yintercept = 0), color = "#444444", linetype = "solid", linewidth = 1.5) +
   geom_boxplot(outliers = FALSE, linewidth = 1, shape = 16) +
-  geom_jitter(height = 0, width = .2, size = 3, alpha = .5) +
+  geom_jitter(aes(shape = sig), height = 0, width = .2, size = 3, alpha = .7) +
+  geom_segment(x = 1, xend = 2, y = .45, yend = .45, color = "#444444") +
+  annotate("text", x = 1.5, y = .5, label = "<0.001", size = 5, color = "#444444") +
   scale_color_manual(values = c("#E69F00", "#009E73")) +
+  scale_shape_manual(values = c("Y" = 16, "N" = 1)) +
+  scale_y_continuous(limits = c(NA, 0.55)) +
   theme_bw(base_size = 20) +
   labs(x = "", y = "Rho") +
   theme(legend.position = "none", panel.grid = element_blank())
 
 
-## Fig.2b: Heatmap
-
-df4tile = dplyr::full_join(res_birds, res_bats, by = "symbol") |>
-  dplyr::filter(qval_b < 0.05 | qval_a < 0.05) |>
+df4tile = dplyr::full_join(
+  res_birds |>
+    dplyr::filter(symbol %in% lrp$symbol) |>
+    dplyr::rename(Rho_b = Rho, qval_b = p.adj) |>
+    dplyr::select(symbol, Rho_b, qval_b),
+  res_bats |>
+    dplyr::filter(symbol %in% lrp$symbol) |>
+    dplyr::rename(Rho_a = Rho, qval_a = p.adj) |>
+    dplyr::select(symbol, Rho_a, qval_a),
+  by = "symbol") |>
+  dplyr::filter(qval_a < 0.05 | qval_b < 0.05) |>
   dplyr::select(symbol, Rho_b, Rho_a) |>
   dplyr::rename("Birds" = Rho_b, "Bats" = "Rho_a") |>
-  pivot_longer(2:3, names_to = "group", values_to = "Rho")
+  tidyr::pivot_longer(2:3, names_to = "group", values_to = "Rho")
 
 tile = ggplot(df4tile) +
   aes(x = symbol, y = group, fill = Rho) +
@@ -116,7 +140,7 @@ tile = ggplot(df4tile) +
   theme(panel.grid = element_blank(), axis.text.y = element_text(size = 7, face = "bold"))
 
 
-## Fig.2c: oxygen
+## oxygen
 
 bird = rphylopic::get_phylopic(uuid = "eeb0df66-27ac-4cd9-852d-1af5a1f7679c")
 bat = rphylopic::get_phylopic(uuid = "18bfd2fc-f184-4c3a-b511-796aafcc70f6")
@@ -155,8 +179,6 @@ ox_level = data.frame(
   ) +
   theme_classic(base_size = 20)
 
-
-## Cowplot and save
 
 p_ab = cowplot::plot_grid(box, tile, labels = c("a", "b"), rel_widths = c(1, 1.33), label_size = 20)
 p = cowplot::plot_grid(p_ab, ox_level, nrow=  2, labels = c("", "c"), label_size = 20)
