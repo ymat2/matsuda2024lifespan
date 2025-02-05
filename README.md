@@ -1,7 +1,8 @@
 
 # Matsuda2024lifespan
 
-In this repository you find codes used in Matsuda and Makino (2024) Comparative genomics reveals convergent signals associated with the high metabolism and longevity in birds and bats.
+In this repository you find codes used in Matsuda and Makino (2024)
+[Comparative genomics reveals convergent signals associated with the high metabolism and longevity in birds and bats](https://doi.org/10.1098/rspb.2024.1068).
 
 ## Requirements
 
